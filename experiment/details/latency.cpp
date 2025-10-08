@@ -21,6 +21,7 @@
 #include <cassert>
 #include <chrono>
 #include <limits>
+#include <cmath>
 #include "common/database.hpp"
 #include "common/quantity.hpp"
 #include "configuration.hpp"
@@ -58,6 +59,21 @@ LatencyStatistics LatencyStatistics::compute_statistics(uint64_t* arr_latencies_
     instance.m_stddev = (sum2 / arr_latencies_sz) - (instance.m_mean * instance.m_mean);
     instance.m_min = vmin;
     instance.m_max = vmax;
+
+    // Compute per-chunk means
+    if (chunk_size > 0) {
+        uint64_t num_chunks = (arr_latencies_sz + chunk_size - 1) / chunk_size;
+        instance.m_chunk_means.reserve(num_chunks);
+        for (uint64_t i = 0; i < arr_latencies_sz; i += chunk_size) {
+            uint64_t chunk_end = min(i + chunk_size, arr_latencies_sz);
+            uint64_t chunk_sum = 0;
+            for (uint64_t j = i; j < chunk_end; j++) {
+                chunk_sum += arr_latencies_nanosecs[j];
+            }
+            uint64_t chunk_mean = chunk_sum / (chunk_end - i);
+            instance.m_chunk_means.push_back(chunk_mean);
+        }
+    }
 
     // compute the percentiles
     sort(arr_latencies_nanosecs, arr_latencies_nanosecs + arr_latencies_sz);
@@ -102,6 +118,15 @@ void LatencyStatistics::save(const std::string& name){
     store.add("p95", m_percentile95);
     store.add("p97", m_percentile97);
     store.add("p99", m_percentile99);
+
+    // Save per-chunk means as separate entries
+    int chunk_index = 0;
+    for (auto chunk_mean : m_chunk_means) {
+        auto chunk_store = configuration().db()->add("latencies_chunks");
+        chunk_store.add("type", name);
+        chunk_store.add("chunk_index", chunk_index++);
+        chunk_store.add("chunk_mean", chunk_mean);
+    }
 }
 
 static DurationQuantity _D(uint64_t value){
@@ -113,6 +138,16 @@ std::ostream& operator<<(std::ostream& out, const LatencyStatistics& stats){
             << "std. dev.: " << _D(stats.m_stddev) << ", min: " << _D(stats.m_min) << ", max: " << _D(stats.m_max) << ", "
             << "perc 90: " << _D(stats.m_percentile90) << ", perc 95: " << _D(stats.m_percentile95) << ", "
             << "perc 97: " << _D(stats.m_percentile97) << ", perc 99: " << _D(stats.m_percentile99);
+    
+    //if (!stats.m_chunk_means.empty()) {
+    //    out << "\nChunk means (nanosec): [";
+    //    for (size_t i = 0; i < stats.m_chunk_means.size(); i++) {
+    //        out << stats.m_chunk_means[i];
+    //        if (i + 1 < stats.m_chunk_means.size()) out << ", ";
+    //    }
+    //    out << "]";
+    //}
+    
     return out;
 }
 

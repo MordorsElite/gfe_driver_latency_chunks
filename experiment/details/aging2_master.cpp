@@ -307,7 +307,7 @@ void Aging2Master::wait_and_record() {
     } while(!done && !m_stop_experiment);
 
     if(m_stop_experiment){ // wait the workers to terminate
-        for(auto i = 0; i < m_workers.size(); i++) {
+        for(std::size_t i = 0; i < m_workers.size(); i++) {
           auto& w = m_workers[i];
           auto until = chrono::steady_clock::now() + 5 * 60s;
           auto idle = w->wait(until);
