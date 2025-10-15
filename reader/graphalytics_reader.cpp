@@ -28,6 +28,8 @@
 #include "configuration.hpp"
 #include "utility.hpp"
 
+#include <cstring>
+
 using namespace std;
 using namespace gfe::reader::details;
 
