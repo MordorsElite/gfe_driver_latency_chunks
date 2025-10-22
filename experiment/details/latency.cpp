@@ -36,7 +36,10 @@ static uint64_t get_percentile(uint64_t* __restrict A, uint64_t A_sz, uint64_t i
     return A[pos > 0 ? (pos -1) : 0];
 }
 
-LatencyStatistics LatencyStatistics::compute_statistics(uint64_t* arr_latencies_nanosecs, uint64_t arr_latencies_sz){
+LatencyStatistics LatencyStatistics::compute_statistics(
+        uint64_t* arr_latencies_nanosecs, 
+        uint64_t arr_latencies_sz,
+        uint64_t chunk_size){
     LatencyStatistics instance;
     if(arr_latencies_sz == 0) return instance;
 
@@ -124,7 +127,7 @@ void LatencyStatistics::save(const std::string& name){
     for (auto chunk_mean : m_chunk_means) {
         auto chunk_store = configuration().db()->add("latencies_chunks");
         chunk_store.add("type", name);
-        chunk_store.add("chunk_index", chunk_index++);
+        chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
         chunk_store.add("chunk_mean", chunk_mean);
     }
 }
