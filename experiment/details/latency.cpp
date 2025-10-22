@@ -126,7 +126,7 @@ void LatencyStatistics::save(const std::string& name){
     int chunk_index = 0;
     for (auto chunk_mean : m_chunk_means) {
         auto chunk_store = configuration().db()->add("latencies_chunks");
-        chunk_store.add("type", name);
+        //chunk_store.add("type", name);
         chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
         chunk_store.add("chunk_mean", chunk_mean);
     }
