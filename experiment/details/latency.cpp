@@ -130,29 +130,25 @@ void LatencyStatistics::save(const std::string& name){
     store.add("p99", m_percentile99);
 
     // Save per-chunk means as separate entries
+    // Save per-chunk means as separate entries
     std::cout << "LatencyStatistics:save Chunking: " << name << std::endl;
 
     auto db = configuration().db();
-    auto conn = static_cast<sqlite3*>(db->get_connection_handle()); 
+    db->set_keep_alive(true);
 
-    sqlite3_exec(conn, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    int chunk_index = 0;
+    for (auto chunk_mean : m_chunk_means) {
+        auto chunk_store = db->add("latencies_chunks");
+        chunk_store.add("type", name);
+        chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
+        chunk_store.add("chunk_mean", chunk_mean);
 
-    try {
-        int chunk_index = 0;
-        for (auto chunk_mean : m_chunk_means) {
-            auto chunk_store = db->add("latencies_chunks");
-            chunk_store.add("type", name);
-            chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
-            chunk_store.add("chunk_mean", chunk_mean);
-        }
-
-        sqlite3_exec(conn, "COMMIT;", nullptr, nullptr, nullptr);
+        if (chunk_index % 1000 == 0)
+            std::cout << "Saved " << chunk_index << " chunks..." << std::endl;
     }
-    catch (const std::exception& e) {
-        std::cerr << "Error while saving latency chunks: " << e.what() << std::endl;
-        sqlite3_exec(conn, "ROLLBACK;", nullptr, nullptr, nullptr);
-        throw;
-    }
+
+    std::cout << "LatencyStatistics: finished saving " 
+            << m_chunk_means.size() << " chunks for " << name << std::endl;
 
     //int chunk_index = 0;
     //for (auto chunk_mean : m_chunk_means) {
