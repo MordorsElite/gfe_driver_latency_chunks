@@ -42,6 +42,8 @@ LatencyStatistics LatencyStatistics::compute_statistics(
         uint64_t chunk_size){
     LatencyStatistics instance;
     if(arr_latencies_sz == 0) return instance;
+    
+    out << "Latency Statistics::compute_statistics : Chunking";
 
     // compute mean/std.dev/min/max
     uint64_t sum = 0;
@@ -63,6 +65,7 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     instance.m_min = vmin;
     instance.m_max = vmax;
 
+    out << "Latency Statistics::compute_statistics : Chunking";
     // Compute per-chunk means
     if (chunk_size > 0) {
         uint64_t num_chunks = (arr_latencies_sz + chunk_size - 1) / chunk_size;
@@ -107,6 +110,8 @@ chrono::nanoseconds LatencyStatistics::percentile99() const {
 }
 
 void LatencyStatistics::save(const std::string& name){
+    out << "LatencyStatistics:save : " << name;
+
     assert(configuration().db() != nullptr);
 
     auto store = configuration().db()->add("latencies");
@@ -121,6 +126,8 @@ void LatencyStatistics::save(const std::string& name){
     store.add("p95", m_percentile95);
     store.add("p97", m_percentile97);
     store.add("p99", m_percentile99);
+
+    out << "LatencyStatistics:save Chunking: " << name;
 
     // Save per-chunk means as separate entries
     int chunk_index = 0;
