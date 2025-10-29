@@ -43,7 +43,7 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     LatencyStatistics instance;
     if(arr_latencies_sz == 0) return instance;
     
-    std::cout << "Latency Statistics::compute_statistics : Chunking";
+    std::cout << "Latency Statistics::compute_statistics : General\n";
 
     // compute mean/std.dev/min/max
     uint64_t sum = 0;
@@ -65,7 +65,7 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     instance.m_min = vmin;
     instance.m_max = vmax;
 
-    std::cout << "Latency Statistics::compute_statistics : Chunking";
+    std::cout << "Latency Statistics::compute_statistics : Chunking\n";
     // Compute per-chunk means
     if (chunk_size > 0) {
         uint64_t num_chunks = (arr_latencies_sz + chunk_size - 1) / chunk_size;
@@ -110,7 +110,7 @@ chrono::nanoseconds LatencyStatistics::percentile99() const {
 }
 
 void LatencyStatistics::save(const std::string& name){
-    std::cout << "LatencyStatistics:save : " << name;
+    std::cout << "LatencyStatistics:save General: " << name << std::endl;
 
     assert(configuration().db() != nullptr);
 
@@ -127,16 +127,37 @@ void LatencyStatistics::save(const std::string& name){
     store.add("p97", m_percentile97);
     store.add("p99", m_percentile99);
 
-    std::cout << "LatencyStatistics:save Chunking: " << name;
-
     // Save per-chunk means as separate entries
-    int chunk_index = 0;
-    for (auto chunk_mean : m_chunk_means) {
-        auto chunk_store = configuration().db()->add("latencies_chunks");
-        //chunk_store.add("type", name);
-        chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
-        chunk_store.add("chunk_mean", chunk_mean);
+    std::cout << "LatencyStatistics:save Chunking: " << name << std::endl;
+
+    auto db = configuration().db();
+
+    db->exec("BEGIN TRANSACTION;");
+    try {
+        int chunk_index = 0;
+        for (auto chunk_mean : m_chunk_means) {
+            auto chunk_store = db->add("latencies_chunks");
+            chunk_store.add("type", name);
+            chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
+            chunk_store.add("chunk_mean", chunk_mean);
+        }
+
+        // Commit once at the end
+        db->exec("COMMIT;");
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error while saving latency chunks: " << e.what() << std::endl;
+        db->exec("ROLLBACK;");
+        throw;
     }
+    
+    //int chunk_index = 0;
+    //for (auto chunk_mean : m_chunk_means) {
+    //    auto chunk_store = configuration().db()->add("latencies_chunks");
+    //    chunk_store.add("type", name);
+    //    chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
+    //    chunk_store.add("chunk_mean", chunk_mean);
+    //}
 }
 
 static DurationQuantity _D(uint64_t value){
