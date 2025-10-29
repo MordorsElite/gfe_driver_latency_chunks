@@ -130,25 +130,73 @@ void LatencyStatistics::save(const std::string& name){
     store.add("p99", m_percentile99);
 
     // Save per-chunk means as separate entries
-    // Save per-chunk means as separate entries
-    std::cout << "LatencyStatistics:save Chunking: " << name << std::endl;
+    // Save per-chunk means as separate entries (fast version)
+    std::cout << "LatencyStatistics:save Chunking (fast path): " << name << std::endl;
 
     auto db = configuration().db();
-    db->set_keep_alive(true);
+    sqlite3* conn = static_cast<sqlite3*>(db->get_connection_handle());
+
+    if (!conn) {
+        std::cerr << "Error: Database handle is null!" << std::endl;
+        return;
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql =
+        "INSERT INTO latencies_chunks (type, chunk_index, chunk_mean) VALUES (?, ?, ?);";
+
+    if (sqlite3_prepare_v2(conn, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(conn) << std::endl;
+        return;
+    }
+
+    // Try to start a transaction, but if one is already open, that’s fine
+    int rc = sqlite3_exec(conn, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Warning: couldn't begin transaction (" << sqlite3_errmsg(conn)
+                << "), continuing anyway.\n";
+    }
 
     int chunk_index = 0;
     for (auto chunk_mean : m_chunk_means) {
-        auto chunk_store = db->add("latencies_chunks");
-        chunk_store.add("type", name);
-        chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
-        chunk_store.add("chunk_mean", chunk_mean);
+        sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(stmt, 2, chunk_index++);
+        sqlite3_bind_double(stmt, 3, static_cast<double>(chunk_mean));
 
-        if (chunk_index % 1000 == 0)
-            std::cout << "Saved " << chunk_index << " chunks..." << std::endl;
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Insert failed: " << sqlite3_errmsg(conn) << std::endl;
+            break;
+        }
+
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
     }
 
-    std::cout << "LatencyStatistics: finished saving " 
-            << m_chunk_means.size() << " chunks for " << name << std::endl;
+    sqlite3_exec(conn, "COMMIT;", nullptr, nullptr, nullptr);
+    sqlite3_finalize(stmt);
+
+    std::cout << "LatencyStatistics: finished saving " << m_chunk_means.size()
+            << " chunks for " << name << std::endl;
+
+    //std::cout << "LatencyStatistics:save Chunking: " << name << std::endl;
+    //
+    //auto db = configuration().db();
+    //db->set_keep_alive(true);
+    //
+    //int chunk_index = 0;
+    //for (auto chunk_mean : m_chunk_means) {
+    //    auto chunk_store = db->add("latencies_chunks");
+    //    chunk_store.add("type", name);
+    //    chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
+    //    chunk_store.add("chunk_mean", chunk_mean);
+    //
+    //    if (chunk_index % 1000 == 0)
+    //        std::cout << "Saved " << chunk_index << " chunks..." << std::endl;
+    //}
+    //
+    //std::cout << "LatencyStatistics: finished saving " 
+    //        << m_chunk_means.size() << " chunks for " << name << std::endl;
 
     //int chunk_index = 0;
     //for (auto chunk_mean : m_chunk_means) {
