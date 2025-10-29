@@ -26,6 +26,8 @@
 #include "common/quantity.hpp"
 #include "configuration.hpp"
 
+#include <sqlite3.h>
+
 using namespace common;
 using namespace std;
 
@@ -131,8 +133,10 @@ void LatencyStatistics::save(const std::string& name){
     std::cout << "LatencyStatistics:save Chunking: " << name << std::endl;
 
     auto db = configuration().db();
+    auto conn = static_cast<sqlite3*>(db->get_connection_handle()); 
 
-    db->exec("BEGIN TRANSACTION;");
+    sqlite3_exec(conn, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+
     try {
         int chunk_index = 0;
         for (auto chunk_mean : m_chunk_means) {
@@ -142,15 +146,14 @@ void LatencyStatistics::save(const std::string& name){
             chunk_store.add("chunk_mean", chunk_mean);
         }
 
-        // Commit once at the end
-        db->exec("COMMIT;");
-
-    } catch (const std::exception& e) {
+        sqlite3_exec(conn, "COMMIT;", nullptr, nullptr, nullptr);
+    }
+    catch (const std::exception& e) {
         std::cerr << "Error while saving latency chunks: " << e.what() << std::endl;
-        db->exec("ROLLBACK;");
+        sqlite3_exec(conn, "ROLLBACK;", nullptr, nullptr, nullptr);
         throw;
     }
-    
+
     //int chunk_index = 0;
     //for (auto chunk_mean : m_chunk_means) {
     //    auto chunk_store = configuration().db()->add("latencies_chunks");
