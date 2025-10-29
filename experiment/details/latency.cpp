@@ -141,6 +141,16 @@ void LatencyStatistics::save(const std::string& name){
         return;
     }
 
+    // Create Table
+    sqlite3_exec(conn,
+        "CREATE TABLE IF NOT EXISTS latencies_chunks ("
+        "type TEXT, "
+        "chunk_index INTEGER, "
+        "chunk_mean REAL"
+        ");",
+        nullptr, nullptr, nullptr);
+
+
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
         "INSERT INTO latencies_chunks (type, chunk_index, chunk_mean) VALUES (?, ?, ?);";
