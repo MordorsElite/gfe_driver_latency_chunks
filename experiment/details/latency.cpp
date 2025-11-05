@@ -129,6 +129,18 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     return instance;
 }
 
+chrono::nanoseconds LatencyStatistics::mean() const {
+    return chrono::nanoseconds(m_mean);
+}
+
+chrono::nanoseconds LatencyStatistics::percentile90() const {
+    return chrono::nanoseconds(m_percentile90);
+}
+
+chrono::nanoseconds LatencyStatistics::percentile99() const {
+    return chrono::nanoseconds(m_percentile99);
+}
+
 void LatencyStatistics::save(const std::string& name){
     std::cout << "LatencyStatistics:save General: " << name << std::endl;
 
