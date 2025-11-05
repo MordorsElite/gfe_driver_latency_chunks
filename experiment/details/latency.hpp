@@ -39,8 +39,13 @@ class LatencyStatistics {
     uint64_t m_percentile97 {0};
     uint64_t m_percentile99 {0};
 
-    // Per-chunk averages
+    // Per-chunk statistics
     std::vector<uint64_t> m_chunk_means;
+    std::vector<uint64_t> m_chunk_mins;
+    std::vector<uint64_t> m_chunk_maxs;
+    std::vector<uint64_t> m_chunk_p90s;
+    std::vector<uint64_t> m_chunk_p95s;
+    std::vector<uint64_t> m_chunk_p99s;
 
 
 public:
@@ -73,9 +78,14 @@ public:
     std::chrono::nanoseconds percentile99() const;
 
     /**
-     * Retrieve per-chunk mean latencies
+     * Retrieve per-chunk statistics
      */
     const std::vector<uint64_t>& chunk_means() const { return m_chunk_means; }
+    const std::vector<uint64_t>& chunk_mins() const { return m_chunk_mins; }
+    const std::vector<uint64_t>& chunk_maxs() const { return m_chunk_maxs; }
+    const std::vector<uint64_t>& chunk_p90s() const { return m_chunk_p90s; }
+    const std::vector<uint64_t>& chunk_p95s() const { return m_chunk_p95s; }
+    const std::vector<uint64_t>& chunk_p99s() const { return m_chunk_p99s; } 
 };
 
 std::ostream& operator<<(std::ostream& out, const LatencyStatistics& stats);

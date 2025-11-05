@@ -68,22 +68,52 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     instance.m_max = vmax;
 
     std::cout << "Latency Statistics::compute_statistics : Chunking\n";
-    // Compute per-chunk means
+    // Compute per-chunk means + min/max + percentiles
     if (chunk_size > 0) {
         uint64_t num_chunks = (arr_latencies_sz + chunk_size - 1) / chunk_size;
         instance.m_chunk_means.reserve(num_chunks);
+        instance.m_chunk_mins.reserve(num_chunks);
+        instance.m_chunk_maxs.reserve(num_chunks);
+        instance.m_chunk_p90s.reserve(num_chunks);
+        instance.m_chunk_p95s.reserve(num_chunks);
+        instance.m_chunk_p99s.reserve(num_chunks);
+
         for (uint64_t i = 0; i < arr_latencies_sz; i += chunk_size) {
             uint64_t chunk_end = min(i + chunk_size, arr_latencies_sz);
+            uint64_t chunk_len = chunk_end - i;
+
             uint64_t chunk_sum = 0;
+            uint64_t chunk_min = numeric_limits<uint64_t>::max();
+            uint64_t chunk_max = 0;
+
+            // Copy chunk to temporary array for percentile calculation
+            std::vector<uint64_t> chunk_data;
+            chunk_data.reserve(chunk_len);
+
             for (uint64_t j = i; j < chunk_end; j++) {
-                chunk_sum += arr_latencies_nanosecs[j];
+                uint64_t v = arr_latencies_nanosecs[j];
+                chunk_sum += v;
+                chunk_min = min(chunk_min, v);
+                chunk_max = max(chunk_max, v);
+                chunk_data.push_back(v);
             }
-            uint64_t chunk_mean = chunk_sum / (chunk_end - i);
+
+            sort(chunk_data.begin(), chunk_data.end());
+            uint64_t chunk_mean = chunk_sum / chunk_len;
+            uint64_t p90 = get_percentile(chunk_data.data(), chunk_len, 90);
+            uint64_t p95 = get_percentile(chunk_data.data(), chunk_len, 95);
+            uint64_t p99 = get_percentile(chunk_data.data(), chunk_len, 99);
+
             instance.m_chunk_means.push_back(chunk_mean);
+            instance.m_chunk_mins.push_back(chunk_min);
+            instance.m_chunk_maxs.push_back(chunk_max);
+            instance.m_chunk_p90s.push_back(p90);
+            instance.m_chunk_p95s.push_back(p95);
+            instance.m_chunk_p99s.push_back(p99);
         }
     }
 
-    // compute the percentiles
+    // compute the percentiles for entire dataset
     sort(arr_latencies_nanosecs, arr_latencies_nanosecs + arr_latencies_sz);
     instance.m_percentile90 = get_percentile(arr_latencies_nanosecs, arr_latencies_sz, 90);
     instance.m_percentile95 = get_percentile(arr_latencies_nanosecs, arr_latencies_sz, 95);
@@ -97,18 +127,6 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     }
 
     return instance;
-}
-
-chrono::nanoseconds LatencyStatistics::mean() const {
-    return chrono::nanoseconds(m_mean);
-}
-
-chrono::nanoseconds LatencyStatistics::percentile90() const {
-    return chrono::nanoseconds(m_percentile90);
-}
-
-chrono::nanoseconds LatencyStatistics::percentile99() const {
-    return chrono::nanoseconds(m_percentile99);
 }
 
 void LatencyStatistics::save(const std::string& name){
@@ -129,9 +147,8 @@ void LatencyStatistics::save(const std::string& name){
     store.add("p97", m_percentile97);
     store.add("p99", m_percentile99);
 
-    // Save per-chunk means as separate entries
-    // Save per-chunk means as separate entries (fast version)
-    std::cout << "LatencyStatistics:save Chunking (fast path): " << name << std::endl;
+    // Save per-chunk data
+    std::cout << "LatencyStatistics:save Chunking (extended): " << name << std::endl;
 
     auto db = configuration().db();
     sqlite3* conn = static_cast<sqlite3*>(db->get_connection_handle());
@@ -141,26 +158,31 @@ void LatencyStatistics::save(const std::string& name){
         return;
     }
 
-    // Create Table
+    // Create Table (extended)
     sqlite3_exec(conn,
         "CREATE TABLE IF NOT EXISTS latencies_chunks ("
         "type TEXT, "
         "chunk_index INTEGER, "
-        "chunk_mean REAL"
+        "chunk_mean REAL, "
+        "chunk_min REAL, "
+        "chunk_max REAL, "
+        "chunk_p90 REAL, "
+        "chunk_p95 REAL, "
+        "chunk_p99 REAL"
         ");",
         nullptr, nullptr, nullptr);
 
-
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
-        "INSERT INTO latencies_chunks (type, chunk_index, chunk_mean) VALUES (?, ?, ?);";
+        "INSERT INTO latencies_chunks "
+        "(type, chunk_index, chunk_mean, chunk_min, chunk_max, chunk_p90, chunk_p95, chunk_p99) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
 
     if (sqlite3_prepare_v2(conn, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(conn) << std::endl;
         return;
     }
 
-    // Try to start a transaction, but if one is already open, that’s fine
     int rc = sqlite3_exec(conn, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr);
     if (rc != SQLITE_OK) {
         std::cerr << "Warning: couldn't begin transaction (" << sqlite3_errmsg(conn)
@@ -168,10 +190,15 @@ void LatencyStatistics::save(const std::string& name){
     }
 
     int chunk_index = 0;
-    for (auto chunk_mean : m_chunk_means) {
+    for (size_t k = 0; k < m_chunk_means.size(); ++k) {
         sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(stmt, 2, chunk_index++);
-        sqlite3_bind_double(stmt, 3, static_cast<double>(chunk_mean));
+        sqlite3_bind_double(stmt, 3, static_cast<double>(m_chunk_means[k]));
+        sqlite3_bind_double(stmt, 4, static_cast<double>(m_chunk_mins[k]));
+        sqlite3_bind_double(stmt, 5, static_cast<double>(m_chunk_maxs[k]));
+        sqlite3_bind_double(stmt, 6, static_cast<double>(m_chunk_p90s[k]));
+        sqlite3_bind_double(stmt, 7, static_cast<double>(m_chunk_p95s[k]));
+        sqlite3_bind_double(stmt, 8, static_cast<double>(m_chunk_p99s[k]));
 
         rc = sqlite3_step(stmt);
         if (rc != SQLITE_DONE) {
@@ -187,34 +214,7 @@ void LatencyStatistics::save(const std::string& name){
     sqlite3_finalize(stmt);
 
     std::cout << "LatencyStatistics: finished saving " << m_chunk_means.size()
-            << " chunks for " << name << std::endl;
-
-    //std::cout << "LatencyStatistics:save Chunking: " << name << std::endl;
-    //
-    //auto db = configuration().db();
-    //db->set_keep_alive(true);
-    //
-    //int chunk_index = 0;
-    //for (auto chunk_mean : m_chunk_means) {
-    //    auto chunk_store = db->add("latencies_chunks");
-    //    chunk_store.add("type", name);
-    //    chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
-    //    chunk_store.add("chunk_mean", chunk_mean);
-    //
-    //    if (chunk_index % 1000 == 0)
-    //        std::cout << "Saved " << chunk_index << " chunks..." << std::endl;
-    //}
-    //
-    //std::cout << "LatencyStatistics: finished saving " 
-    //        << m_chunk_means.size() << " chunks for " << name << std::endl;
-
-    //int chunk_index = 0;
-    //for (auto chunk_mean : m_chunk_means) {
-    //    auto chunk_store = configuration().db()->add("latencies_chunks");
-    //    chunk_store.add("type", name);
-    //    chunk_store.add("chunk_index", static_cast<int64_t>(chunk_index++));
-    //    chunk_store.add("chunk_mean", chunk_mean);
-    //}
+              << " chunks for " << name << std::endl;
 }
 
 static DurationQuantity _D(uint64_t value){
@@ -223,20 +223,12 @@ static DurationQuantity _D(uint64_t value){
 
 std::ostream& operator<<(std::ostream& out, const LatencyStatistics& stats){
     out << "N: " << stats.m_num_operations << ", mean: " << _D(stats.m_mean) << ", median: " << _D(stats.m_median) << ", "
-            << "std. dev.: " << _D(stats.m_stddev) << ", min: " << _D(stats.m_min) << ", max: " << _D(stats.m_max) << ", "
-            << "perc 90: " << _D(stats.m_percentile90) << ", perc 95: " << _D(stats.m_percentile95) << ", "
-            << "perc 97: " << _D(stats.m_percentile97) << ", perc 99: " << _D(stats.m_percentile99);
-    
-    //if (!stats.m_chunk_means.empty()) {
-    //    out << "\nChunk means (nanosec): [";
-    //    for (size_t i = 0; i < stats.m_chunk_means.size(); i++) {
-    //        out << stats.m_chunk_means[i];
-    //        if (i + 1 < stats.m_chunk_means.size()) out << ", ";
-    //    }
-    //    out << "]";
-    //}
-    
+        << "std. dev.: " << _D(stats.m_stddev) << ", min: " << _D(stats.m_min) << ", max: " << _D(stats.m_max) << ", "
+        << "perc 90: " << _D(stats.m_percentile90) << ", perc 95: " << _D(stats.m_percentile95) << ", "
+        << "perc 97: " << _D(stats.m_percentile97) << ", perc 99: " << _D(stats.m_percentile99);
+
     return out;
 }
 
-} // namespace
+} // namespace gfe::experiment::details
+
