@@ -72,6 +72,7 @@ LatencyStatistics LatencyStatistics::compute_statistics(
     if (chunk_size > 0) {
         uint64_t num_chunks = (arr_latencies_sz + chunk_size - 1) / chunk_size;
         instance.m_chunk_means.reserve(num_chunks);
+        instance.m_chunk_medians.reserve(num_chunks);
         instance.m_chunk_mins.reserve(num_chunks);
         instance.m_chunk_maxs.reserve(num_chunks);
         instance.m_chunk_p90s.reserve(num_chunks);
@@ -100,11 +101,18 @@ LatencyStatistics LatencyStatistics::compute_statistics(
 
             sort(chunk_data.begin(), chunk_data.end());
             uint64_t chunk_mean = chunk_sum / chunk_len;
+            uint64_t chunk_median = -1;
+            if (chunk_len % 2 == 0) {
+                chunk_median = (chunk_data[chunk_len/2] + chunk_data[(chunk_len/2)-1]) / 2;
+            } else {
+                chunk_median = chunk_data[chunk_len/2];
+            }
             uint64_t p90 = get_percentile(chunk_data.data(), chunk_len, 90);
             uint64_t p95 = get_percentile(chunk_data.data(), chunk_len, 95);
             uint64_t p99 = get_percentile(chunk_data.data(), chunk_len, 99);
 
             instance.m_chunk_means.push_back(chunk_mean);
+            instance.m_chunk_medians.push_back(chunk_median);
             instance.m_chunk_mins.push_back(chunk_min);
             instance.m_chunk_maxs.push_back(chunk_max);
             instance.m_chunk_p90s.push_back(p90);
@@ -178,6 +186,7 @@ void LatencyStatistics::save(const std::string& name){
         "chunk_mean REAL, "
         "chunk_min REAL, "
         "chunk_max REAL, "
+        "chunk_median REAL, " 
         "chunk_p90 REAL, "
         "chunk_p95 REAL, "
         "chunk_p99 REAL"
@@ -187,8 +196,8 @@ void LatencyStatistics::save(const std::string& name){
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
         "INSERT INTO latencies_chunks "
-        "(type, chunk_index, chunk_mean, chunk_min, chunk_max, chunk_p90, chunk_p95, chunk_p99) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+        "(type, chunk_index, chunk_mean, chunk_min, chunk_max, chunk_median, chunk_p90, chunk_p95, chunk_p99) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
     if (sqlite3_prepare_v2(conn, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(conn) << std::endl;
@@ -206,6 +215,7 @@ void LatencyStatistics::save(const std::string& name){
         sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(stmt, 2, chunk_index++);
         sqlite3_bind_double(stmt, 3, static_cast<double>(m_chunk_means[k]));
+        sqlite3_bind_double(stmt, 6, static_cast<double>(m_chunk_medians[k]));
         sqlite3_bind_double(stmt, 4, static_cast<double>(m_chunk_mins[k]));
         sqlite3_bind_double(stmt, 5, static_cast<double>(m_chunk_maxs[k]));
         sqlite3_bind_double(stmt, 6, static_cast<double>(m_chunk_p90s[k]));

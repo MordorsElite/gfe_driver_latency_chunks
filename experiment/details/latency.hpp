@@ -41,6 +41,7 @@ class LatencyStatistics {
 
     // Per-chunk statistics
     std::vector<uint64_t> m_chunk_means;
+    std::vector<uint64_t> m_chunk_medians;
     std::vector<uint64_t> m_chunk_mins;
     std::vector<uint64_t> m_chunk_maxs;
     std::vector<uint64_t> m_chunk_p90s;
@@ -81,11 +82,13 @@ public:
      * Retrieve per-chunk statistics
      */
     const std::vector<uint64_t>& chunk_means() const { return m_chunk_means; }
+    const std::vector<uint64_t>& chunk_medians() const { return m_chunk_medians; }
     const std::vector<uint64_t>& chunk_mins() const { return m_chunk_mins; }
     const std::vector<uint64_t>& chunk_maxs() const { return m_chunk_maxs; }
     const std::vector<uint64_t>& chunk_p90s() const { return m_chunk_p90s; }
     const std::vector<uint64_t>& chunk_p95s() const { return m_chunk_p95s; }
     const std::vector<uint64_t>& chunk_p99s() const { return m_chunk_p99s; } 
+
 };
 
 std::ostream& operator<<(std::ostream& out, const LatencyStatistics& stats);
