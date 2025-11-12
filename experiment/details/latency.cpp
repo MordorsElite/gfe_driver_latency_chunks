@@ -184,9 +184,9 @@ void LatencyStatistics::save(const std::string& name){
         "type TEXT, "
         "chunk_index INTEGER, "
         "chunk_mean REAL, "
+        "chunk_median REAL, " 
         "chunk_min REAL, "
         "chunk_max REAL, "
-        "chunk_median REAL, " 
         "chunk_p90 REAL, "
         "chunk_p95 REAL, "
         "chunk_p99 REAL"
@@ -196,7 +196,7 @@ void LatencyStatistics::save(const std::string& name){
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
         "INSERT INTO latencies_chunks "
-        "(type, chunk_index, chunk_mean, chunk_min, chunk_max, chunk_median, chunk_p90, chunk_p95, chunk_p99) "
+        "(type, chunk_index, chunk_mean, chunk_median, chunk_min, chunk_max, chunk_p90, chunk_p95, chunk_p99) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
     if (sqlite3_prepare_v2(conn, sql, -1, &stmt, nullptr) != SQLITE_OK) {
