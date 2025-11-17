@@ -215,12 +215,12 @@ void LatencyStatistics::save(const std::string& name){
         sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int64(stmt, 2, chunk_index++);
         sqlite3_bind_double(stmt, 3, static_cast<double>(m_chunk_means[k]));
-        sqlite3_bind_double(stmt, 6, static_cast<double>(m_chunk_medians[k]));
-        sqlite3_bind_double(stmt, 4, static_cast<double>(m_chunk_mins[k]));
-        sqlite3_bind_double(stmt, 5, static_cast<double>(m_chunk_maxs[k]));
-        sqlite3_bind_double(stmt, 6, static_cast<double>(m_chunk_p90s[k]));
-        sqlite3_bind_double(stmt, 7, static_cast<double>(m_chunk_p95s[k]));
-        sqlite3_bind_double(stmt, 8, static_cast<double>(m_chunk_p99s[k]));
+        sqlite3_bind_double(stmt, 4, static_cast<double>(m_chunk_medians[k]));
+        sqlite3_bind_double(stmt, 5, static_cast<double>(m_chunk_mins[k]));
+        sqlite3_bind_double(stmt, 6, static_cast<double>(m_chunk_maxs[k]));
+        sqlite3_bind_double(stmt, 7, static_cast<double>(m_chunk_p90s[k]));
+        sqlite3_bind_double(stmt, 8, static_cast<double>(m_chunk_p95s[k]));
+        sqlite3_bind_double(stmt, 9, static_cast<double>(m_chunk_p99s[k]));
 
         rc = sqlite3_step(stmt);
         if (rc != SQLITE_DONE) {
